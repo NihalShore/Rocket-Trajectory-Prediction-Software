@@ -1,0 +1,21 @@
+# Simple Estes-class model rocket
+name: model_c6
+description: Single-stage model rocket with an approximate C6 motor
+
+launch:
+  angle_deg: 85
+  azimuth_deg: 0
+  rail_length: 1.0
+
+stages:
+  - name: single
+    dry_mass: 0.06
+    diameter: 0.025
+    length: 0.45
+    motors:
+      - name: C6
+        propellant_mass: 0.0124
+        dry_mass: 0.022
+        total_impulse: 10.0
+        burn_time: 1.6
+        peak_factor: 1.5

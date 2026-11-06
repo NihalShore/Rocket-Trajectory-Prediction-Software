@@ -1,0 +1,34 @@
+# Two-stage solid sounding rocket (illustrative numbers)
+name: sounding_two_stage
+description: Booster + sustainer configuration for ~30-40 km apogee class
+
+launch:
+  angle_deg: 80
+  azimuth_deg: 0
+  rail_length: 10.0
+
+stages:
+  - name: booster
+    dry_mass: 40.0
+    diameter: 0.30
+    length: 3.0
+    motors:
+      - name: booster_motor
+        propellant_mass: 120.0
+        dry_mass: 15.0
+        total_impulse: 280000
+        burn_time: 9.0
+        peak_factor: 1.35
+
+  - name: sustainer
+    dry_mass: 22.0
+    diameter: 0.22
+    length: 2.2
+    ignition_delay: 1.5
+    motors:
+      - name: sustainer_motor
+        propellant_mass: 45.0
+        dry_mass: 8.0
+        total_impulse: 110000
+        burn_time: 15.0
+        peak_factor: 1.25
