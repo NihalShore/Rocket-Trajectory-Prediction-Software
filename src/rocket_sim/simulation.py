@@ -72,11 +72,15 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram|None=None) ->
     initial_atm=atmosphere(max(0.,y[1]),config.atmosphere_model)
     empty_loads=aerodynamic_loads(max(0.,y[1]),0.,vehicle.reference_area,vehicle.drag_coefficient,config.atmosphere_model)
     samples.append(_sample(t,y,0.,empty_loads,0,"liftoff"))
-    while t<config.max_time and y[1]>=0 and stage_index<len(stages):
-        stage=stages[stage_index]
-        flow=stage.propellant_mass/stage.burn_time
-        remaining=stage.burn_time-stage_elapsed
-        h=min(config.time_step,remaining,config.max_time-t)
+    while t<config.max_time and y[1]>=0:
+        stage=stages[stage_index] if stage_index<len(stages) else None
+        if stage is None:
+            flow=0.0
+            h=min(config.time_step,config.max_time-t)
+        else:
+            flow=stage.propellant_mass/stage.burn_time
+            remaining=stage.burn_time-stage_elapsed
+            h=min(config.time_step,remaining,config.max_time-t)
         if h<=1e-10:
             stage_index+=1; stage_elapsed=0.
             y[4]-=stage.dry_mass+stage.fairing_mass
@@ -101,7 +105,7 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram|None=None) ->
                 ax_drag=-drag*vx/(speed*max(mass,1e-9))
                 ay_drag=-drag*vy/(speed*max(mass,1e-9))
             else: ax_drag=ay_drag=0.
-            thrust=_stage_thrust(stage,atm.pressure)
+            thrust=_stage_thrust(stage,atm.pressure) if stage is not None else 0.0
             ux,uy=pitch.direction(time)
             g=gravity(safe_alt)
             return np.array([vx,vy,thrust*ux/max(mass,1e-9)+ax_drag,
@@ -111,18 +115,20 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram|None=None) ->
         else: yn=fixed[config.integrator](derivative,t,y,h)
         if stage is not None: yn[4]=max(yn[4],y[4]-stage.propellant_mass)
         yn[1]=max(-1.,yn[1])
-        t+=h; stage_elapsed+=h; y=yn
+        t+=h
+        if stage is not None: stage_elapsed+=h
+        y=yn
         atm=atmosphere(max(0.,y[1]),config.atmosphere_model)
         speed=math.hypot(y[2],y[3]); loads=aerodynamic_loads(max(0.,y[1]),speed,vehicle.reference_area,vehicle.drag_coefficient,config.atmosphere_model)
-        thrust=_stage_thrust(stage,atm.pressure)
+        thrust=_stage_thrust(stage,atm.pressure) if stage is not None else 0.0
         samples.append(_sample(t,y,thrust,loads,stage_index))
         if config.max_dynamic_pressure and loads.dynamic_pressure>config.max_dynamic_pressure:
             events.append(Event(t,"dynamic_pressure_limit",float(y[1]),speed,float(y[4]),{"limit":config.max_dynamic_pressure}))
             break
-        if config.stop_at_apogee and len(samples)>1 and samples[-2].state.vertical_velocity>0>=y[3]:
+        if len(samples)>1 and samples[-2].state.vertical_velocity>0>=y[3]:
             events.append(Event(t,"apogee",float(y[1]),speed,float(y[4]),{}))
             samples[-1]=_sample(t,y,thrust,loads,stage_index,"apogee")
-            break
+            if config.stop_at_apogee: break
     if stage_index>=len(stages) and not any(e.name=="burnout" for e in events):
         events.append(Event(t,"burnout",float(y[1]),float(math.hypot(y[2],y[3])),float(y[4]),{}))
     from .vehicle import ideal_vehicle_delta_v
