@@ -40,6 +40,10 @@ result = simulate(example_config(), gravity_turn_program(12, 145, 8))
 print(result.metrics)
 ```
 
+## Cross-language components
+
+The Python package is the primary end-to-end simulator. A compact C++17 reference library is available under `cpp/`; build it with `cmake -S cpp -B cpp/build && cmake --build cpp/build && ctest --test-dir cpp/build`. MATLAB reference routines and a small example are in `matlab/`; add that directory to the MATLAB path and run `example_ascent`.
+
 ## Model scope and limitations
 
 This is a transparent educational and preliminary-analysis model, not a flight dynamics or launch-operations system. It uses a planar point-mass state and prescribed pitch angle. The generic drag curve is not vehicle-specific aerodynamic data. The atmosphere is intended for lower-atmosphere studies and uses an isothermal pressure extrapolation above its tabulated layers. Engine thrust is represented by a constant nominal value with a simple ambient-pressure correction. The model does not resolve attitude, steering constraints, winds, staging transients, structural loads, thermal response, plume interactions, orbital perturbations, or range safety.
@@ -51,6 +55,9 @@ Treat results as exploratory estimates. Validate assumptions against authoritati
 - `src/rocket_sim/`: physics, configuration, numerical integration, simulation, metrics, and I/O.
 - `tests/`: unit and integration tests.
 - `examples/`: short API examples.
+- `cpp/`: C++17 reference library, demo, and native tests.
+- `matlab/`: MATLAB atmosphere, propulsion, drag, and integration examples.
+- `docs/`: model assumptions, numerical methods, output format, and development notes.
 
 ## License
 
