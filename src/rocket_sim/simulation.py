@@ -109,7 +109,7 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram|None=None) ->
         if config.integrator=="rk45":
             yn,error=rk45_step(derivative,t,y,h)
         else: yn=fixed[config.integrator](derivative,t,y,h)
-        yn[4]=max(yn[4],y[4]-stage.propellant_mass)
+        if stage is not None: yn[4]=max(yn[4],y[4]-stage.propellant_mass)
         yn[1]=max(-1.,yn[1])
         t+=h; stage_elapsed+=h; y=yn
         atm=atmosphere(max(0.,y[1]),config.atmosphere_model)
