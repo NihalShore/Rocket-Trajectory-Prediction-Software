@@ -10,6 +10,10 @@ A modular Python toolkit for conceptual multistage ascent simulation, trajectory
 - Multistage propellant depletion, dry-mass separation, and pressure-adjusted thrust.
 - Piecewise-linear pitch programs and Euler, Heun, RK4, and embedded RK45 stepping.
 - Trajectory metrics, event records, diagnostics, data export, and optional plots.
+- Adaptive Dormand-Prince integration as a standalone numerical utility.
+- Wind-relative aerodynamic load helpers, coefficient-table interpolation, and constraint margins.
+- Sensitivity and Monte Carlo analysis, stage performance summaries, and mass-property estimates.
+- Two-body orbital calculations for post-ascent interpretation.
 
 ## Installation
 
