@@ -16,7 +16,7 @@ from .gravity import gravity
 from .integrators import euler_step,heun_step,rk4_step,rk45_step
 from .metrics import TrajectoryMetrics,compute_metrics
 from .state import Event,State,TrajectorySample
-from .guidance import PitchProgram,vertical_program
+from .guidance import PitchKnot,PitchProgram
 
 @dataclass(frozen=True)
 class SimulationResult:
@@ -57,7 +57,7 @@ def _sample(time,y,thrust,loads,stage_index,event=""):
 def simulate(config: SimulationConfig, pitch_program: PitchProgram|None=None) -> SimulationResult:
     """Run the configured ascent and return immutable samples and summary metrics."""
     vehicle=config.vehicle
-    pitch=pitch_program or vertical_program()
+    pitch=pitch_program or PitchProgram([PitchKnot(0.0,config.launch_elevation_deg)])
     heading=math.radians(config.launch_azimuth_deg)
     elevation=math.radians(config.launch_elevation_deg)
     vx0=0.0; vy0=0.0
@@ -125,9 +125,7 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram|None=None) ->
             break
     if stage_index>=len(stages) and not any(e.name=="burnout" for e in events):
         events.append(Event(t,"burnout",float(y[1]),float(math.hypot(y[2],y[3])),float(y[4]),{}))
-    ideal_dv=0.
-    for s in stages:
-        ve=s.thrust_vacuum/(s.propellant_mass/s.burn_time)
-        ideal_dv+=ve*math.log((s.dry_mass+s.propellant_mass+vehicle.payload_mass)/(s.dry_mass+vehicle.payload_mass))
+    from .vehicle import ideal_vehicle_delta_v
+    ideal_dv=ideal_vehicle_delta_v(vehicle)
     metrics=compute_metrics(samples,ideal_dv)
     return SimulationResult(config,tuple(samples),tuple(events),metrics)
