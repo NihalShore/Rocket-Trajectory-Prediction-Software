@@ -64,6 +64,7 @@ class SimulationConfig:
         if self.max_time<=0 or self.time_step<=0: raise ValueError("time controls must be positive")
         if self.initial_altitude<0: raise ValueError("initial altitude cannot be negative")
         if not -90<=self.latitude_deg<=90: raise ValueError("latitude must be within [-90,90]")
+        if not 0<=self.launch_elevation_deg<=180: raise ValueError("launch elevation must be within [0,180]")
         if self.atmosphere_model not in {"ussa1976","exponential"}: raise ValueError("unknown atmosphere model")
         if self.integrator not in {"rk4","rk45","euler","heun"}: raise ValueError("unsupported integrator")
         if self.max_dynamic_pressure is not None and self.max_dynamic_pressure<=0: raise ValueError("max dynamic pressure must be positive")
