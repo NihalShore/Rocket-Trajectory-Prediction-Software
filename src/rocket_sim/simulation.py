@@ -59,7 +59,6 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram|None=None) ->
     vehicle=config.vehicle
     pitch=pitch_program or PitchProgram([PitchKnot(0.0,config.launch_elevation_deg)])
     heading=math.radians(config.launch_azimuth_deg)
-    elevation=math.radians(config.launch_elevation_deg)
     vx0=0.0; vy0=0.0
     if config.include_earth_rotation:
         vx0=EARTH_ROTATION_RATE*6371000.*math.cos(math.radians(config.latitude_deg))*math.sin(heading)
@@ -69,7 +68,6 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram|None=None) ->
     stages=list(vehicle.stages)
     fixed={"euler":euler_step,"heun":heun_step,"rk4":rk4_step}
     if config.integrator not in fixed and config.integrator!="rk45": raise ValueError("unsupported integrator")
-    initial_atm=atmosphere(max(0.,y[1]),config.atmosphere_model)
     empty_loads=aerodynamic_loads(max(0.,y[1]),0.,vehicle.reference_area,vehicle.drag_coefficient,config.atmosphere_model)
     samples.append(_sample(t,y,0.,empty_loads,0,"liftoff"))
     while t<config.max_time and y[1]>=0:
@@ -107,7 +105,7 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram|None=None) ->
             else: ax_drag=ay_drag=0.
             thrust=_stage_thrust(stage,atm.pressure) if stage is not None else 0.0
             ux,uy=pitch.direction(time)
-            g=gravity(safe_alt)
+            g=gravity(safe_alt) if config.include_gravity_loss else 0.0
             return np.array([vx,vy,thrust*ux/max(mass,1e-9)+ax_drag,
                              thrust*uy/max(mass,1e-9)+ay_drag-g,-flow])
         if config.integrator=="rk45":
