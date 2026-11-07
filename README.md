@@ -1,122 +1,71 @@
 # Rocket Trajectory Prediction Software
 
-Simulate multistage rocket ascent through the atmosphere with drag and thrust modelling.  
-Python is the primary implementation; a lightweight C++ core and MATLAB scripts are also included for cross-checks and performance-critical loops.
+Point-mass multistage ascent sim. Python first, with a small C++ core and a
+couple of MATLAB helpers for cross-checks.
 
-## What it does
+Does the usual stuff: atmosphere, drag, thrust vs ambient pressure, sequential
+staging, a pitch program, a few integrators. Not a 6-DOF vehicle dynamics code —
+no aero moments, no structural modes, no wind by default.
 
-- 3-DOF point-mass equations of motion (down-range, cross-range, altitude)
-- 1976 International Standard Atmosphere up to ~85 km
-- Thrust curves (tabulated or generated) with multi-stage separation
-- Aerodynamic drag (constant Cd or Mach table)
-- Gravity turn after rail departure, optional custom pitch program
-- Monte-Carlo dispersion and simple design optimisation helpers
-- CSV / JSON / plot export
+Extra toys: monte carlo, engine-out / early staging, aeroheating, recovery chutes,
+range-safety footprint, thrust tables, max-q throttle helper.
 
-## Quick start
+## Setup
 
 ```bash
 git clone https://github.com/NihalShore/Rocket-Trajectory-Prediction-Software.git
 cd Rocket-Trajectory-Prediction-Software
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e ".[test,plot]"
 ```
 
-Run the built-in model-rocket demo:
+## Run something
 
 ```bash
 python main.py
+python main.py --vehicle small --step 0.05 --stop-apogee
+python -m rocket_sim.cli --plot
+python examples/crazy_features_demo.py
 ```
 
-Or a two-stage sounding-rocket config:
-
-```bash
-python main.py --config config/sounding_rocket.yaml --plot
-```
-
-Examples live under `examples/`:
-
-```bash
-python examples/simple_ascent.py
-python examples/multistage.py
-python examples/dispersion_study.py
-```
-
-## Project layout
-
-```
-src/rocket_traj/          Python package
-  atmosphere/             ISA 1976
-  aerodynamics/           drag models
-  propulsion/             thrust curves, motors, stages
-  dynamics/               state, EOM, integrators
-  simulation/             high-level driver
-  visualization/          matplotlib helpers
-  monte_carlo/            dispersion analysis
-  optimization/           grid search / simple GA
-config/                   YAML vehicle definitions
-examples/                 runnable scripts
-tests/                    unit + integration tests
-cpp/                      shared-library C++ core + CLI
-matlab/                   atmosphere + single-stage solver
-```
-
-## Using the library
+## Library usage
 
 ```python
-from rocket_traj import make_solid_stage, SimulationEngine
+from rocket_sim import StageConfig, VehicleConfig, SimulationConfig, simulate
+from rocket_sim.guidance import gravity_turn_program
 
-stage = make_solid_stage(
-    name="stage1",
-    total_impulse=50000,   # N·s
-    burn_time=6.0,
-    propellant_mass=20.0,
-    dry_mass=12.0,
-    diameter=0.18,
+stage = StageConfig(
+    name="S1",
+    dry_mass=12000,
+    propellant_mass=65000,
+    thrust_vacuum=1.5e6,
+    burn_time=100,
+    thrust_sea_level=1.3e6,
 )
+vehicle = VehicleConfig([stage], payload_mass=900, reference_area=5.2, drag_coefficient=0.4)
+config = SimulationConfig(vehicle, max_time=300, time_step=0.25)
 
-eng = SimulationEngine([stage], launch_angle_deg=82, rail_length=6)
-traj = eng.run()
-print(traj.summary())
+result = simulate(config, gravity_turn_program(8, 100, 12))
+print(result.metrics)
 ```
 
-Config files are also supported – see `config/model_rocket.yaml` and `config/sounding_rocket.yaml`.
+## Layout
 
-## C++ core
-
-```bash
-cd cpp
-mkdir build && cd build
-cmake ..
-cmake --build .
-./rocket_traj_cli 500 6 85    # thrust [N], burn [s], angle [deg]
 ```
-
-## MATLAB
-
-```matlab
-addpath('matlab');
-stage.dry_mass = 12;
-stage.propellant_mass = 20;
-stage.diameter = 0.18;
-stage.thrust = 800;          % constant
-stage.burn_time = 6;
-traj = simulate_rocket(stage, struct('angle_deg', 85));
-plot_trajectory(traj);
+src/rocket_sim/     simulator
+config/             yaml examples
+examples/           scripts
+tests/              pytest
+cpp/                C++ mirror
+matlab/             atmosphere + simple ascent
+docs/               model notes
 ```
 
 ## Tests
 
 ```bash
-pip install pytest
 pytest tests/ -q
 ```
 
-## Notes
-
-- The gravity model is constant-g by default; inverse-square is available via a flag.
-- Drag is axial only – no lift or moments.  Good enough for first-cut performance, not for stability work.
-- Numbers in the example configs are illustrative, not flight-proven motors.
-
-License: Apache 2.0 (see LICENSE).
+Apache 2.0 — see LICENSE.
