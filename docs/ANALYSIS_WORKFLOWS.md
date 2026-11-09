@@ -10,11 +10,12 @@ half and double the perturbation to inspect derivative stability.
 
 ## Monte Carlo exploration
 
-The uncertainty module provides seeded scalar sampling and summary statistics.
-A caller supplies the configuration factory that maps each sample to a full
-simulation result. Record the random seed, distribution family, parameter
-units, truncation rules, and metric name. A mean and percentile interval do
-not replace inspection of multimodal or heavy-tailed distributions.
+The uncertainty module accepts a base SimulationConfig and perturbs stage
+thrust, stage dry and propellant mass, and vehicle drag coefficient. Runs
+accept an explicit random seed and return each SimulationResult plus summary
+statistics for apogee, maximum dynamic pressure, maximum speed, and downrange.
+Simulation errors are not suppressed. Record the seed, perturbation scales,
+and metric definitions with each study.
 
 ## Constraint margins
 

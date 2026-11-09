@@ -25,11 +25,13 @@ def total_heat_load(samples, nose_radius=_RN_DEFAULT):
             continue
 
         def flux(s):
-            v = s.state.speed
-            if v < 1.0:
+            speed = s.air_relative_speed
+            if speed is None:
+                speed = s.state.speed
+            if speed < 1.0:
                 return 0.0
-            rho = 2.0 * s.dynamic_pressure / (v * v) if v > 0 else 0.0
-            return sutton_graves(rho, v, nose_radius)
+            density = 2.0 * s.dynamic_pressure / (speed * speed)
+            return sutton_graves(density, speed, nose_radius)
 
         total += 0.5 * (flux(a) + flux(b)) * dt
     return total
@@ -39,11 +41,13 @@ def peak_heat_flux(samples, nose_radius=_RN_DEFAULT):
     peak = 0.0
     t_peak = 0.0
     for s in samples:
-        v = s.state.speed
-        if v < 1.0:
+        speed = s.air_relative_speed
+        if speed is None:
+            speed = s.state.speed
+        if speed < 1.0:
             continue
-        rho = 2.0 * s.dynamic_pressure / (v * v)
-        qdot = sutton_graves(rho, v, nose_radius)
+        density = 2.0 * s.dynamic_pressure / (speed * speed)
+        qdot = sutton_graves(density, speed, nose_radius)
         if qdot > peak:
             peak = qdot
             t_peak = s.time

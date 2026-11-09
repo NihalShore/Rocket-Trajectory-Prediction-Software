@@ -2,14 +2,10 @@
 
 ## Environment
 
-Use Python 3.10 or newer. Install the editable package with the test extra:
+Use Python 3.10 or newer. Install the package with the same extras used by CI:
 
-```sh
-python -m pip install -e '.[test]'
-pytest -q
-```
-
-Plotting is optional and can be installed with `.[plot]`.
+    python -m pip install -e ".[test,plot]"
+    pytest tests/ -q
 
 ## Design conventions
 

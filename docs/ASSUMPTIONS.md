@@ -9,7 +9,7 @@ This register summarizes the main simplifications that affect interpretation.
 | Guidance | Prescribed pitch schedule | No closed-loop steering |
 | Gravity | Spherical inverse-square field | No oblateness or third bodies |
 | Atmosphere | Layered lower-atmosphere approximation | High-altitude values are extrapolated |
-| Wind | Separate interpolated profile utility | Not yet coupled to the force model |
+| Wind | East/north wind projected onto launch azimuth; vertical wind applied directly | No wind component perpendicular to the launch plane |
 | Drag | Generic Mach-dependent coefficient | Not vehicle-specific |
 | Propulsion | Constant nominal stage thrust | No startup, shutdown, throttling, or transients |
 | Propellant | Uniform mass flow during burn | No feed-system or mixture-ratio dynamics |
