@@ -1,8 +1,8 @@
 """2D point-mass ascent.
 
-Downrange + altitude only. Drag, variable g, pitch program, sequential stages.
-No attitude dynamics, no wind, no flexible body stuff. Good enough for
-first-cut performance numbers.
+Downrange + altitude only. Drag, variable g, pitch program, sequential stages,
+and optional altitude-dependent wind. Wind perpendicular to the launch plane is
+not represented by this 2D model.
 """
 from dataclasses import dataclass
 import math
@@ -47,8 +47,22 @@ class SimulationResult:
         return np.asarray([s.state.mass for s in self.samples])
 
     def to_dict(self):
+        wind_profile = self.config.wind_profile
         return {
             "metadata": dict(self.config.metadata),
+            "wind_profile": (
+                None
+                if wind_profile is None
+                else [
+                    {
+                        "altitude": altitude,
+                        "east": east,
+                        "north": north,
+                        "vertical": vertical,
+                    }
+                    for altitude, east, north, vertical in wind_profile.levels
+                ]
+            ),
             "metrics": self.metrics.__dict__,
             "events": [e.__dict__ for e in self.events],
             "samples": [
@@ -65,6 +79,9 @@ class SimulationResult:
                     "mach": s.mach,
                     "stage_index": s.stage_index,
                     "event": s.event,
+                    "wind_downrange": s.wind_downrange,
+                    "wind_vertical": s.wind_vertical,
+                    "air_relative_speed": s.air_relative_speed,
                 }
                 for s in self.samples
             ],
@@ -81,7 +98,25 @@ def _stage_thrust(stage, pressure):
     return stage.thrust_vacuum - (stage.thrust_vacuum - sea) * frac
 
 
-def _sample(time, y, thrust, loads, stage_index, event=""):
+def _wind_components(config, altitude, heading):
+    profile = config.wind_profile
+    if profile is None:
+        return 0.0, 0.0
+
+    wind = profile.at(max(0.0, altitude))
+    horizontal = wind.east * math.sin(heading) + wind.north * math.cos(heading)
+    return horizontal, wind.vertical
+
+
+def _air_relative_velocity(config, altitude, heading, vx, vy):
+    wind_x, wind_y = _wind_components(config, altitude, heading)
+    return vx - wind_x, vy - wind_y, wind_x, wind_y
+
+
+def _sample(
+    time, y, thrust, loads, stage_index, event="",
+    wind_downrange=0.0, wind_vertical=0.0, air_relative_speed=None,
+):
     state = State(float(y[0]), float(y[1]), float(y[2]), float(y[3]), float(y[4]))
     return TrajectorySample(
         float(time),
@@ -92,6 +127,9 @@ def _sample(time, y, thrust, loads, stage_index, event=""):
         float(loads.mach),
         int(stage_index),
         event,
+        float(wind_downrange),
+        float(wind_vertical),
+        None if air_relative_speed is None else float(air_relative_speed),
     )
 
 
@@ -133,14 +171,20 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
     if config.integrator not in fixed and config.integrator != "rk45":
         raise ValueError(f"unsupported integrator: {config.integrator}")
 
+    air_vx, air_vy, wind_x, wind_y = _air_relative_velocity(
+        config, y[1], heading, y[2], y[3]
+    )
+    air_speed = math.hypot(air_vx, air_vy)
     empty = aerodynamic_loads(
         max(0.0, y[1]),
-        0.0,
+        air_speed,
         vehicle.reference_area,
         vehicle.drag_coefficient,
         config.atmosphere_model,
     )
-    samples.append(_sample(t, y, 0.0, empty, 0, "liftoff"))
+    samples.append(
+        _sample(t, y, 0.0, empty, 0, "liftoff", wind_x, wind_y, air_speed)
+    )
 
     while t < config.max_time and y[1] >= 0.0:
         stage = stages[stage_index] if stage_index < len(stages) else None
@@ -159,7 +203,6 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             stage_index += 1
             stage_elapsed = 0.0
             y[4] = max(y[4] - stage.dry_mass - stage.fairing_mass, 0.0)
-            # snap mass to avoid float noise like 10.000000000057
             y[4] = round(y[4], 9)
 
             name = "stage_separation" if stage_index < len(stages) else "burnout"
@@ -173,23 +216,23 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
                     {"stage": stage.name, "stage_index": stage_index - 1},
                 )
             )
-            # don't add another sample at the exact same timestamp —
-            # just tag the last one so time stays strictly increasing
+            # don't add another sample at the exact same timestamp
             if samples:
                 last = samples[-1]
+                air_vx, air_vy, wind_x, wind_y = _air_relative_velocity(
+                    config, y[1], heading, y[2], y[3]
+                )
+                air_speed = math.hypot(air_vx, air_vy)
+                loads = aerodynamic_loads(
+                    max(0.0, y[1]),
+                    air_speed,
+                    vehicle.reference_area,
+                    vehicle.drag_coefficient,
+                    config.atmosphere_model,
+                )
                 samples[-1] = _sample(
-                    last.time,
-                    y,
-                    0.0,
-                    aerodynamic_loads(
-                        max(0.0, y[1]),
-                        math.hypot(y[2], y[3]),
-                        vehicle.reference_area,
-                        vehicle.drag_coefficient,
-                        config.atmosphere_model,
-                    ),
-                    stage_index,
-                    name,
+                    last.time, y, 0.0, loads, stage_index, name,
+                    wind_x, wind_y, air_speed,
                 )
             continue
 
@@ -200,14 +243,17 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             x, alt, vx, vy, mass = state
             safe_alt = max(0.0, alt)
             atm = atmosphere(safe_alt, config.atmosphere_model)
-            speed = math.hypot(vx, vy)
-            q = 0.5 * atm.density * speed * speed
-            cd = drag_coefficient(speed / atm.speed_of_sound, vehicle.drag_coefficient)
+            air_vx, air_vy, _, _ = _air_relative_velocity(
+                config, safe_alt, heading, vx, vy
+            )
+            air_speed = math.hypot(air_vx, air_vy)
+            q = 0.5 * atm.density * air_speed * air_speed
+            cd = drag_coefficient(air_speed / atm.speed_of_sound, vehicle.drag_coefficient)
             drag = q * vehicle.reference_area * cd
 
-            if speed > 1e-9:
-                ax_drag = -drag * vx / (speed * max(mass, 1e-9))
-                ay_drag = -drag * vy / (speed * max(mass, 1e-9))
+            if air_speed > 1e-9:
+                ax_drag = -drag * air_vx / (air_speed * max(mass, 1e-9))
+                ay_drag = -drag * air_vy / (air_speed * max(mass, 1e-9))
             else:
                 ax_drag = ay_drag = 0.0
 
@@ -241,16 +287,24 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
         y = yn
 
         atm = atmosphere(max(0.0, y[1]), config.atmosphere_model)
-        speed = math.hypot(y[2], y[3])
+        air_vx, air_vy, wind_x, wind_y = _air_relative_velocity(
+            config, y[1], heading, y[2], y[3]
+        )
+        air_speed = math.hypot(air_vx, air_vy)
         loads = aerodynamic_loads(
             max(0.0, y[1]),
-            speed,
+            air_speed,
             vehicle.reference_area,
             vehicle.drag_coefficient,
             config.atmosphere_model,
         )
         thrust = _stage_thrust(stage, atm.pressure) if stage is not None else 0.0
-        samples.append(_sample(t, y, thrust, loads, stage_index))
+        samples.append(
+            _sample(
+                t, y, thrust, loads, stage_index, "",
+                wind_x, wind_y, air_speed,
+            )
+        )
 
         if config.max_dynamic_pressure and loads.dynamic_pressure > config.max_dynamic_pressure:
             events.append(
@@ -258,7 +312,7 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
                     t,
                     "dynamic_pressure_limit",
                     float(y[1]),
-                    speed,
+                    float(math.hypot(y[2], y[3])),
                     float(y[4]),
                     {"limit": config.max_dynamic_pressure},
                 )
@@ -267,8 +321,16 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
 
         # apogee: vertical velocity crossed zero going down
         if len(samples) > 1 and samples[-2].state.vertical_velocity > 0 >= y[3]:
-            events.append(Event(t, "apogee", float(y[1]), speed, float(y[4]), {}))
-            samples[-1] = _sample(t, y, thrust, loads, stage_index, "apogee")
+            events.append(
+                Event(
+                    t, "apogee", float(y[1]),
+                    float(math.hypot(y[2], y[3])), float(y[4]), {},
+                )
+            )
+            samples[-1] = _sample(
+                t, y, thrust, loads, stage_index, "apogee",
+                wind_x, wind_y, air_speed,
+            )
             if config.stop_at_apogee:
                 break
 
