@@ -3,6 +3,7 @@
 Perturb a few knobs, rerun, collect stats. Not a full UQ pipeline.
 """
 from dataclasses import dataclass, replace
+import math
 import random
 import numpy as np
 
@@ -63,6 +64,16 @@ def run_monte_carlo(
     seed=None,
     progress=None,
 ):
+    if not isinstance(n, int) or isinstance(n, bool) or n < 1:
+        raise ValueError("n must be a positive integer")
+    for name, sigma in (
+        ("thrust_sigma", thrust_sigma),
+        ("mass_sigma", mass_sigma),
+        ("cd_sigma", cd_sigma),
+    ):
+        if not math.isfinite(sigma) or sigma < 0:
+            raise ValueError(f"{name} must be finite and nonnegative")
+
     rng = random.Random(seed)
     pitch = pitch_program or gravity_turn_program()
     results = []
@@ -76,13 +87,11 @@ def run_monte_carlo(
             payload_mass=base_config.vehicle.payload_mass,
             reference_area=base_config.vehicle.reference_area,
             drag_coefficient=cd,
+            nose_drag_coefficient=base_config.vehicle.nose_drag_coefficient,
             name=base_config.vehicle.name,
         )
         cfg = replace(base_config, vehicle=vehicle)
-        try:
-            r = simulate(cfg, pitch)
-        except Exception:
-            continue
+        r = simulate(cfg, pitch)
         results.append(r)
         apogees.append(r.metrics.maximum_altitude)
         max_qs.append(r.metrics.maximum_dynamic_pressure)

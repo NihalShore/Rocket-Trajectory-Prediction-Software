@@ -11,10 +11,15 @@ of the trajectory or a rotating Earth frame.
 ## Translational equations
 
 For vehicle mass m, thrust magnitude T, prescribed unit direction u, drag
-magnitude D, speed v, and gravitational acceleration g(h), the implemented
-acceleration is the sum of thrust, drag opposite the velocity vector, and
-vertical gravity. Propellant flow is represented by a constant rate during
-each stage burn. Stage dry mass is removed at the end of its burn interval.
+magnitude D, speed relative to the air v_a, and gravitational acceleration
+g(h), the implemented acceleration is the sum of thrust, drag opposite the
+air-relative velocity vector, and vertical gravity. Propellant flow is
+represented by a constant rate during each stage burn. Stage dry mass is
+removed at the end of its burn interval.
+
+The air-relative velocity is formed by subtracting the wind projected onto the
+launch plane from the vehicle velocity. East/north wind is projected onto the
+launch azimuth; the vertical wind component is used directly.
 
 ## Atmosphere
 
@@ -25,10 +30,11 @@ thermosphere model; high-altitude extrapolation is deliberately simple.
 
 ## Aerodynamics
 
-Dynamic pressure is q = rho v² / 2. Drag is D = q A Cd. The supplied
-coefficient curve adds a smooth transonic rise to a baseline coefficient.
-Replace it with validated vehicle-specific data for meaningful aerodynamic
-loads. Reynolds number uses the equivalent circular reference length.
+Dynamic pressure is q = rho |v_a|^2 / 2. Drag is D = q A Cd and acts opposite
+the air-relative velocity. The supplied coefficient curve adds a smooth
+transonic rise to a baseline coefficient. Replace it with validated
+vehicle-specific data for meaningful aerodynamic loads. Reynolds number uses
+the equivalent circular reference length.
 
 ## Propulsion
 
@@ -49,4 +55,5 @@ adaptive error controller.
 
 This code is intended for education and preliminary sensitivity studies. It
 does not provide a validated launch vehicle performance prediction, flight
-control design, structural sizing, thermal analysis, or range-safety assessment.
+control design, structural sizing, thermal analysis, or range-safety
+assessment.

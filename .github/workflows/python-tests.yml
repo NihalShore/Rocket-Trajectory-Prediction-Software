@@ -19,6 +19,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e ".[test]"
-      - run: pytest --cov=rocket_sim --cov-report=term-missing
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install --upgrade pip
+      - run: .venv/bin/python -m pip install -e ".[test,plot]"
+      - run: .venv/bin/pytest tests/ -q
+      - run: .venv/bin/python main.py
+      - run: .venv/bin/python main.py --vehicle small --step 0.05 --stop-apogee
+      - name: Run module CLI without a display
+        env:
+          MPLBACKEND: Agg
+        run: .venv/bin/python -m rocket_sim.cli --plot
+      - run: for example in examples/*.py; do .venv/bin/python "$example"; done

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rocket-trajectory-prediction"
 version = "0.2.0"
-description = "A modular multistage rocket ascent simulation and trajectory analysis toolkit."
+description = "A planar multistage rocket ascent simulator and trajectory analysis toolkit."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
@@ -19,6 +19,7 @@ rocket-sim = "rocket_sim.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["rocket_sim*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

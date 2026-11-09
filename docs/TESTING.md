@@ -12,12 +12,10 @@ The test suite is organized around independent responsibilities.
 - Orbital tests check circular speed, escape speed, period, and transfer limits.
 - Helper tests cover coordinate transforms, wind interpolation, and constraints.
 
-Run the complete Python suite with:
+Run the complete Python suite with the same commands used by CI:
 
-```sh
-python -m pip install -e '.[test]'
-pytest -q
-```
+    python -m pip install -e ".[test,plot]"
+    pytest tests/ -q
 
 The C++ reference library has a CMake/CTest suite. Its test executable checks
 selected atmosphere, gravity, rocket-equation, and RK4 relationships.
