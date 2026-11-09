@@ -113,6 +113,13 @@ def _air_relative_velocity(config, altitude, heading, vx, vy):
     return vx - wind_x, vy - wind_y, wind_x, wind_y
 
 
+def _merge_event(existing, event):
+    names = [name for name in existing.split(";") if name]
+    if event not in names:
+        names.append(event)
+    return ";".join(names)
+
+
 def _sample(
     time, y, thrust, loads, stage_index, event="",
     wind_downrange=0.0, wind_vertical=0.0, air_relative_speed=None,
@@ -231,8 +238,8 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
                     config.atmosphere_model,
                 )
                 samples[-1] = _sample(
-                    last.time, y, 0.0, loads, stage_index, name,
-                    wind_x, wind_y, air_speed,
+                    last.time, y, 0.0, loads, stage_index,
+                    _merge_event(last.event, name), wind_x, wind_y, air_speed,
                 )
             continue
 
@@ -333,6 +340,50 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             )
             if config.stop_at_apogee:
                 break
+
+    # The loop may stop at max_time on the exact burnout step, before the
+    # next iteration gets a chance to process the stage transition.
+    if stage_index < len(stages):
+        stage = stages[stage_index]
+        if stage_elapsed >= stage.burn_time - 1e-10:
+            stage_index += 1
+            stage_elapsed = 0.0
+            y[4] = max(y[4] - stage.dry_mass - stage.fairing_mass, 0.0)
+            y[4] = round(y[4], 9)
+            name = "stage_separation" if stage_index < len(stages) else "burnout"
+            events.append(
+                Event(
+                    t,
+                    name,
+                    float(y[1]),
+                    float(math.hypot(y[2], y[3])),
+                    float(y[4]),
+                    {"stage": stage.name, "stage_index": stage_index - 1},
+                )
+            )
+            air_vx, air_vy, wind_x, wind_y = _air_relative_velocity(
+                config, y[1], heading, y[2], y[3]
+            )
+            air_speed = math.hypot(air_vx, air_vy)
+            loads = aerodynamic_loads(
+                max(0.0, y[1]),
+                air_speed,
+                vehicle.reference_area,
+                vehicle.drag_coefficient,
+                config.atmosphere_model,
+            )
+            last = samples[-1]
+            samples[-1] = _sample(
+                last.time,
+                y,
+                0.0,
+                loads,
+                stage_index,
+                _merge_event(last.event, name),
+                wind_x,
+                wind_y,
+                air_speed,
+            )
 
     if stage_index >= len(stages) and not any(e.name == "burnout" for e in events):
         events.append(

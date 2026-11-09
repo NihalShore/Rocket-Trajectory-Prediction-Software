@@ -64,3 +64,17 @@ def test_wind_profile_is_included_in_result_data():
         "vertical": 0.,
     }
     assert "air_relative_speed" in data["samples"][0]
+
+
+
+def test_burnout_at_max_time_is_processed():
+    result = simulate(config(max_time=20.0, time_step=0.1))
+
+    assert any(event.name == "burnout" for event in result.events)
+    assert result.metrics.burnout_time == 20.0
+    assert result.samples[-1].event == "burnout"
+    assert result.samples[-1].state.mass == 130.0
+    assert all(
+        later.time > earlier.time
+        for earlier, later in zip(result.samples, result.samples[1:])
+    )
