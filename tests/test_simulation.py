@@ -7,7 +7,9 @@ from rocket_sim.winds import WindProfile
 def config(**kwargs):
     stage = StageConfig("Short stage", 100., 400., 12000., 20.)
     vehicle = VehicleConfig([stage], 30., .8, .4)
-    return SimulationConfig(vehicle, max_time=40., time_step=.1, **kwargs)
+    options = {"max_time": 40., "time_step": .1}
+    options.update(kwargs)
+    return SimulationConfig(vehicle, **options)
 
 
 def test_simulation_produces_ordered_samples():
