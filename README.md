@@ -32,7 +32,9 @@ python examples/crazy_features_demo.py
 ## Library usage
 
 ```python
-from rocket_sim import StageConfig, VehicleConfig, SimulationConfig, simulate
+from rocket_sim import (
+    StageConfig, VehicleConfig, SimulationConfig, WindProfile, simulate,
+)
 from rocket_sim.guidance import gravity_turn_program
 
 stage = StageConfig(
@@ -44,11 +46,23 @@ stage = StageConfig(
     thrust_sea_level=1.3e6,
 )
 vehicle = VehicleConfig([stage], payload_mass=900, reference_area=5.2, drag_coefficient=0.4)
-config = SimulationConfig(vehicle, max_time=300, time_step=0.25)
+wind = WindProfile([
+    (0, 3, 0, 0),       # altitude, east, north, vertical (m/s)
+    (1000, 8, 2, 0),
+    (10000, 25, 5, 0),
+])
+config = SimulationConfig(
+    vehicle, max_time=300, time_step=0.25, wind_profile=wind,
+)
 
 result = simulate(config, gravity_turn_program(8, 100, 12))
 print(result.metrics)
 ```
+
+Wind is interpolated by altitude and included in air-relative velocity, drag,
+Mach number, and dynamic pressure. The current 2D solver projects the east/north
+wind onto the launch azimuth; crosswind perpendicular to the launch plane is
+not modeled. Wind values are retained in JSON and CSV telemetry.
 
 ## Layout
 
