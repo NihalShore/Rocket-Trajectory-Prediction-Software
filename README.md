@@ -4,8 +4,9 @@ Point-mass multistage ascent sim. Python first, with a small C++ core and a
 couple of MATLAB helpers for cross-checks.
 
 Does the usual stuff: atmosphere, drag, thrust vs ambient pressure, sequential
-staging, a pitch program, a few integrators. Not a 6-DOF vehicle dynamics code —
-no aero moments, no structural modes, no wind by default.
+staging, a pitch program, and a few integrators. Not a 6-DOF vehicle dynamics
+code — no aero moments or structural modes. Wind profiles can be applied in the
+planar flight model.
 
 Extra toys: monte carlo, engine-out / early staging, aeroheating, recovery chutes,
 range-safety footprint, thrust tables, max-q throttle helper.
