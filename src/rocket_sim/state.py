@@ -1,18 +1,25 @@
 """State vector, trajectory sample, and event records."""
 from dataclasses import dataclass
 from typing import NamedTuple
+
+
 class State(NamedTuple):
     downrange: float
     altitude: float
     horizontal_velocity: float
     vertical_velocity: float
     mass: float
+
     @property
-    def speed(self): return (self.horizontal_velocity**2+self.vertical_velocity**2)**.5
+    def speed(self):
+        return (self.horizontal_velocity**2 + self.vertical_velocity**2)**.5
+
     @property
     def flight_path_angle(self):
         import math
-        return math.atan2(self.vertical_velocity,self.horizontal_velocity)
+        return math.atan2(self.vertical_velocity, self.horizontal_velocity)
+
+
 @dataclass(frozen=True)
 class TrajectorySample:
     time: float
@@ -22,7 +29,12 @@ class TrajectorySample:
     dynamic_pressure: float
     mach: float
     stage_index: int
-    event: str=""
+    event: str = ""
+    wind_downrange: float = 0.0
+    wind_vertical: float = 0.0
+    air_relative_speed: float | None = None
+
+
 @dataclass(frozen=True)
 class Event:
     time: float
