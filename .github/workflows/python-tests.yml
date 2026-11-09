@@ -29,4 +29,4 @@ jobs:
         env:
           MPLBACKEND: Agg
         run: .venv/bin/python -m rocket_sim.cli --plot
-      - run: .venv/bin/python examples/feature_analysis.py
+      - run: for example in examples/*.py; do .venv/bin/python "$example"; done
