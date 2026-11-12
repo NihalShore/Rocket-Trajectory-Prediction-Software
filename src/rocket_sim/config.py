@@ -1,7 +1,15 @@
 """Validated immutable configuration records."""
+
+import math
 from dataclasses import dataclass, field
 from typing import Sequence
+
 from .winds import WindProfile
+
+
+def _require_finite(values, label):
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError(f"{label} must be finite")
 
 
 @dataclass(frozen=True)
@@ -18,6 +26,13 @@ class StageConfig:
     separation_time: float = 0.0
 
     def __post_init__(self):
+        required = (self.dry_mass, self.propellant_mass, self.thrust_vacuum, self.burn_time,
+                    self.fairing_mass, self.separation_time)
+        optional = (self.thrust_sea_level, self.specific_impulse_vacuum,
+                    self.specific_impulse_sea_level)
+        _require_finite(required, "stage values")
+        _require_finite((value for value in optional if value is not None), "optional stage values")
+
         for key in ("dry_mass", "propellant_mass", "thrust_vacuum", "burn_time"):
             if getattr(self, key) <= 0:
                 raise ValueError(f"{key} must be positive")
@@ -48,6 +63,14 @@ class VehicleConfig:
     name: str = "Configured launch vehicle"
 
     def __post_init__(self):
+        _require_finite(
+            (self.payload_mass, self.reference_area, self.drag_coefficient),
+            "vehicle values",
+        )
+        if self.nose_drag_coefficient is not None:
+            _require_finite((self.nose_drag_coefficient,), "nose drag coefficient")
+            if self.nose_drag_coefficient < 0:
+                raise ValueError("nose drag coefficient cannot be negative")
         if not self.stages:
             raise ValueError("at least one stage is required")
         if self.payload_mass <= 0 or self.reference_area <= 0:
@@ -84,6 +107,14 @@ class SimulationConfig:
     wind_profile: WindProfile | None = None
 
     def __post_init__(self):
+        values = (
+            self.max_time, self.time_step, self.initial_altitude,
+            self.initial_downrange, self.launch_elevation_deg,
+            self.launch_azimuth_deg, self.latitude_deg,
+        )
+        _require_finite(values, "simulation values")
+        if self.max_dynamic_pressure is not None:
+            _require_finite((self.max_dynamic_pressure,), "maximum dynamic pressure")
         if self.max_time <= 0 or self.time_step <= 0:
             raise ValueError("time controls must be positive")
         if self.initial_altitude < 0:
@@ -100,3 +131,5 @@ class SimulationConfig:
             raise ValueError("max dynamic pressure must be positive")
         if self.wind_profile is not None and not isinstance(self.wind_profile, WindProfile):
             raise TypeError("wind_profile must be a WindProfile or None")
+        if not isinstance(self.metadata, dict):
+            raise TypeError("metadata must be a dictionary")
