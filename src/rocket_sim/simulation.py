@@ -13,7 +13,8 @@ from .atmosphere import atmosphere
 from .config import SimulationConfig
 from .constants import EARTH_ROTATION_RATE
 from .gravity import gravity
-from .integrators import euler_step, heun_step, rk4_step, rk45_step
+from .integrators import euler_step, heun_step, rk4_step
+from .adaptive import integrate_adaptive
 from .metrics import TrajectoryMetrics, compute_metrics
 from .state import Event, State, TrajectorySample
 from .guidance import PitchKnot, PitchProgram
@@ -279,7 +280,19 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             )
 
         if config.integrator == "rk45":
-            yn, _err = rk45_step(derivative, t, y, h)
+            adaptive = integrate_adaptive(
+                derivative,
+                y,
+                t,
+                t + h,
+                initial_step=h,
+                absolute_tolerance=config.absolute_tolerance,
+                relative_tolerance=config.relative_tolerance,
+                min_step=min(config.min_time_step, h),
+                max_step=h,
+                max_steps=config.max_internal_steps,
+            )
+            yn = adaptive.states[-1].copy()
         else:
             yn = fixed[config.integrator](derivative, t, y, h)
 
