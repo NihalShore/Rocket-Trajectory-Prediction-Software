@@ -8,7 +8,11 @@ from .winds import WindProfile
 
 
 def _require_finite(values, label):
-    if not all(math.isfinite(value) for value in values):
+    try:
+        valid = all(math.isfinite(value) for value in values)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{label} must contain numeric values") from exc
+    if not valid:
         raise ValueError(f"{label} must be finite")
 
 
@@ -26,10 +30,14 @@ class StageConfig:
     separation_time: float = 0.0
 
     def __post_init__(self):
-        required = (self.dry_mass, self.propellant_mass, self.thrust_vacuum, self.burn_time,
-                    self.fairing_mass, self.separation_time)
-        optional = (self.thrust_sea_level, self.specific_impulse_vacuum,
-                    self.specific_impulse_sea_level)
+        required = (
+            self.dry_mass, self.propellant_mass, self.thrust_vacuum,
+            self.burn_time, self.fairing_mass, self.separation_time,
+        )
+        optional = (
+            self.thrust_sea_level, self.specific_impulse_vacuum,
+            self.specific_impulse_sea_level,
+        )
         _require_finite(required, "stage values")
         _require_finite((value for value in optional if value is not None), "optional stage values")
 
@@ -105,18 +113,31 @@ class SimulationConfig:
     stop_at_apogee: bool = False
     metadata: dict = field(default_factory=dict)
     wind_profile: WindProfile | None = None
+    absolute_tolerance: float = 1e-8
+    relative_tolerance: float = 1e-6
+    min_time_step: float = 1e-8
+    max_internal_steps: int = 100000
 
     def __post_init__(self):
         values = (
             self.max_time, self.time_step, self.initial_altitude,
             self.initial_downrange, self.launch_elevation_deg,
             self.launch_azimuth_deg, self.latitude_deg,
+            self.absolute_tolerance, self.relative_tolerance, self.min_time_step,
         )
         _require_finite(values, "simulation values")
         if self.max_dynamic_pressure is not None:
             _require_finite((self.max_dynamic_pressure,), "maximum dynamic pressure")
         if self.max_time <= 0 or self.time_step <= 0:
             raise ValueError("time controls must be positive")
+        if self.absolute_tolerance <= 0 or self.relative_tolerance <= 0 or self.min_time_step <= 0:
+            raise ValueError("adaptive solver tolerances and minimum step must be positive")
+        if (
+            not isinstance(self.max_internal_steps, int)
+            or isinstance(self.max_internal_steps, bool)
+            or self.max_internal_steps < 1
+        ):
+            raise ValueError("max_internal_steps must be a positive integer")
         if self.initial_altitude < 0:
             raise ValueError("initial altitude cannot be negative")
         if not -90 <= self.latitude_deg <= 90:

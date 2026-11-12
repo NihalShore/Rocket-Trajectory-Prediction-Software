@@ -58,3 +58,18 @@ def test_simulation_requires_metadata_mapping():
 def test_wind_profile_rejects_non_finite_values(value):
     with pytest.raises(ValueError):
         WindProfile([(0.0, value, 0.0, 0.0)])
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"absolute_tolerance": 0.0},
+        {"relative_tolerance": np.inf},
+        {"min_time_step": np.nan},
+        {"max_internal_steps": 0},
+        {"max_internal_steps": True},
+    ],
+)
+def test_simulation_rejects_invalid_adaptive_controls(kwargs):
+    with pytest.raises((TypeError, ValueError)):
+        SimulationConfig(VehicleConfig([stage()], 50.0, 1.0), **kwargs)
