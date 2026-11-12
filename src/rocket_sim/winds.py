@@ -21,29 +21,40 @@ class WindVector:
 
 class WindProfile:
     def __init__(self, levels):
-        self.levels = tuple(sorted((float(h), float(e), float(n), float(u)) for h, e, n, u in levels))
-        if not self.levels:
+        try:
+            parsed = tuple(
+                sorted((float(h), float(e), float(n), float(u)) for h, e, n, u in levels)
+            )
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("wind levels must contain numeric altitude and velocity values") from exc
+        if not parsed:
             raise ValueError("need at least one level")
-        hs = [L[0] for L in self.levels]
-        if len(hs) != len(set(hs)):
+        if not all(math.isfinite(value) for level in parsed for value in level):
+            raise ValueError("wind levels must contain only finite values")
+
+        self.levels = parsed
+        altitudes = [level[0] for level in self.levels]
+        if len(altitudes) != len(set(altitudes)):
             raise ValueError("duplicate altitudes in wind table")
 
     def at(self, altitude):
+        if not math.isfinite(altitude):
+            raise ValueError("altitude must be finite")
         if altitude <= self.levels[0][0]:
-            _, e, n, u = self.levels[0]
-            return WindVector(e, n, u)
+            _, east, north, vertical = self.levels[0]
+            return WindVector(east, north, vertical)
         if altitude >= self.levels[-1][0]:
-            _, e, n, u = self.levels[-1]
-            return WindVector(e, n, u)
-        for a, b in zip(self.levels, self.levels[1:]):
-            if a[0] <= altitude <= b[0]:
-                f = (altitude - a[0]) / (b[0] - a[0])
+            _, east, north, vertical = self.levels[-1]
+            return WindVector(east, north, vertical)
+        for lower, upper in zip(self.levels, self.levels[1:]):
+            if lower[0] <= altitude <= upper[0]:
+                fraction = (altitude - lower[0]) / (upper[0] - lower[0])
                 return WindVector(
-                    a[1] + f * (b[1] - a[1]),
-                    a[2] + f * (b[2] - a[2]),
-                    a[3] + f * (b[3] - a[3]),
+                    lower[1] + fraction * (upper[1] - lower[1]),
+                    lower[2] + fraction * (upper[2] - lower[2]),
+                    lower[3] + fraction * (upper[3] - lower[3]),
                 )
-        raise RuntimeError("wind interp fell through")
+        raise RuntimeError("wind interpolation failed")
 
 
 def calm_wind():
@@ -66,21 +77,31 @@ def jet_streamish():
 
 
 def random_wind(seed=None, max_speed=25.0):
+    if not math.isfinite(max_speed) or max_speed < 0:
+        raise ValueError("max_speed must be finite and nonnegative")
     rng = random.Random(seed)
     levels = [(0.0, 0.0, 0.0, 0.0)]
-    h = 0.0
+    altitude = 0.0
     for _ in range(6):
-        h += rng.uniform(2000, 12000)
-        spd = rng.uniform(0, max_speed)
-        az = rng.uniform(0, 2 * math.pi)
-        levels.append((h, spd * math.cos(az), spd * math.sin(az), 0.0))
+        altitude += rng.uniform(2000, 12000)
+        speed = rng.uniform(0, max_speed)
+        direction = rng.uniform(0, 2 * math.pi)
+        levels.append(
+            (altitude, speed * math.cos(direction), speed * math.sin(direction), 0.0)
+        )
     return WindProfile(levels)
 
 
 def power_law(v_ref=5.0, z_ref=10.0, alpha=0.15, direction_deg=90.0):
+    if not all(math.isfinite(value) for value in (v_ref, z_ref, alpha, direction_deg)):
+        raise ValueError("wind power-law parameters must be finite")
+    if v_ref < 0 or z_ref <= 0:
+        raise ValueError("wind speed must be nonnegative and reference height positive")
     toward = math.radians((direction_deg + 180.0) % 360.0)
     levels = []
-    for h in [0.1, 10, 50, 100, 500, 1000, 3000, 10000, 30000]:
-        spd = v_ref * (max(h, 0.1) / z_ref) ** alpha
-        levels.append((h, spd * math.sin(toward), spd * math.cos(toward), 0.0))
+    for altitude in [0.1, 10, 50, 100, 500, 1000, 3000, 10000, 30000]:
+        speed = v_ref * (max(altitude, 0.1) / z_ref) ** alpha
+        levels.append(
+            (altitude, speed * math.sin(toward), speed * math.cos(toward), 0.0)
+        )
     return WindProfile(levels)
