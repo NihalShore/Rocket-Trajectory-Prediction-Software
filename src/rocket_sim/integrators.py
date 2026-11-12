@@ -62,15 +62,26 @@ def rk45_step(fun, t, y, h):
 
 
 def integrate_fixed(fun, y0, t0, t1, step, method="rk4"):
+    try:
+        t0, t1, step = float(t0), float(t1), float(step)
+        y0 = np.asarray(y0, dtype=float)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("time values, step, and initial state must be numeric") from exc
+
+    if not np.all(np.isfinite([t0, t1, step])):
+        raise ValueError("time values and step must be finite")
     if step <= 0 or t1 < t0:
-        raise ValueError("invalid integration interval")
+        raise ValueError("step must be positive and end time must not precede start time")
+    if y0.ndim != 1 or y0.size == 0 or not np.all(np.isfinite(y0)):
+        raise ValueError("initial state must be a non-empty, finite 1D array")
+
     methods = {"euler": euler_step, "heun": heun_step, "rk4": rk4_step}
     if method not in methods:
         raise ValueError(f"unsupported fixed method: {method}")
 
     count = int(np.ceil((t1 - t0) / step))
     times = np.linspace(t0, t1, count + 1) if count else np.array([t0])
-    states = np.empty((len(times), len(y0)))
+    states = np.empty((len(times), y0.size))
     states[0] = y0
     for i in range(1, len(times)):
         states[i] = methods[method](fun, times[i - 1], states[i - 1], times[i] - times[i - 1])
