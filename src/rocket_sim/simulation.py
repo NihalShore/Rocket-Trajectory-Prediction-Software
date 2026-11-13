@@ -89,14 +89,14 @@ class SimulationResult:
         }
 
 
-def _stage_thrust(stage, pressure):
-    # if we only have vacuum thrust, just use that
+def _stage_thrust(stage, pressure, elapsed=0.0):
+    vacuum = stage.vacuum_thrust_at(elapsed)
     sea = stage.thrust_sea_level
     if sea is None:
-        return stage.thrust_vacuum
-    # crude linear blend between sea-level and vacuum
-    frac = min(1.0, max(0.0, pressure / 101325.0))
-    return stage.thrust_vacuum - (stage.thrust_vacuum - sea) * frac
+        return vacuum
+    sea_at_time = sea * vacuum / stage.thrust_vacuum
+    pressure_fraction = min(1.0, max(0.0, pressure / 101325.0))
+    return vacuum - (vacuum - sea_at_time) * pressure_fraction
 
 
 def _wind_components(config, altitude, heading):
@@ -265,7 +265,8 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             else:
                 ax_drag = ay_drag = 0.0
 
-            thrust = _stage_thrust(stage, atm.pressure) if stage is not None else 0.0
+            elapsed = stage_elapsed + (time - t)
+            thrust = _stage_thrust(stage, atm.pressure, elapsed) if stage is not None else 0.0
             ux, uy = pitch.direction(time)
             g = gravity(safe_alt) if config.include_gravity_loss else 0.0
 
@@ -318,7 +319,7 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             vehicle.drag_coefficient,
             config.atmosphere_model,
         )
-        thrust = _stage_thrust(stage, atm.pressure) if stage is not None else 0.0
+        thrust = _stage_thrust(stage, atm.pressure, stage_elapsed) if stage is not None else 0.0
         samples.append(
             _sample(
                 t, y, thrust, loads, stage_index, "",

@@ -14,7 +14,7 @@ motion.
     git clone https://github.com/NihalShore/Rocket-Trajectory-Prediction-Software.git
     cd Rocket-Trajectory-Prediction-Software
     python -m venv .venv
-    source .venv/bin/activate   # Windows: .venv\Scripts\activate
+    source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
     pip install -e ".[test,plot]"
 
 ## Run
@@ -46,6 +46,9 @@ neither file is written unless requested.
         thrust_vacuum=1.5e6,
         burn_time=100,
         thrust_sea_level=1.3e6,
+        thrust_curve=[
+            (0, 0), (2, 1.2e6), (90, 1.5e6), (100, 0),
+        ],
     )
     vehicle = VehicleConfig(
         [stage],
@@ -62,6 +65,7 @@ neither file is written unless requested.
         vehicle,
         max_time=300,
         time_step=0.25,
+        integrator="rk45",
         wind_profile=wind,
     )
     pitch = gravity_turn_program(
@@ -72,6 +76,11 @@ neither file is written unless requested.
 
     result = simulate(config, pitch)
     print(result.metrics)
+
+A stage thrust curve is optional and represents vacuum thrust against elapsed
+stage burn time. Values between points are linearly interpolated. Propellant
+consumption remains uniform over the configured burn duration, so the curve
+should be consistent with the selected propellant load and burn time.
 
 The wind table is stored in east/north/vertical components. The planar solver
 projects east/north wind onto the launch azimuth and applies the vertical
@@ -88,8 +97,7 @@ These are analysis utilities: heat flux and dispersion are not certified
 engineering assessments, and the throttle schedule is not fed back into the
 flight integrator.
 
-Tabulated thrust curves and parachute recovery dynamics are not part of the
-simulator.
+Parachute recovery dynamics are not part of the simulator.
 
 ## Other language directories
 

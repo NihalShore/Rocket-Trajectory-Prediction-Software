@@ -12,11 +12,18 @@ specific impulse annotations, fairing mass, and separation timing metadata.
 Dry mass, propellant mass, vacuum thrust, and burn duration must be positive.
 Fairing mass and separation metadata cannot be negative.
 
-The time-domain model consumes the configured propellant mass uniformly over
-the nominal burn interval. The effective exhaust velocity for the ideal
-velocity estimate is derived from vacuum thrust divided by this flow rate.
-If a specific impulse is supplied, treat it as descriptive metadata unless
-you separately reconcile it with the configured thrust and flow.
+An optional `thrust_curve` is a sequence of `(elapsed_time, vacuum_thrust)`
+pairs in seconds and newtons. It must start at zero, end at the configured burn
+time, use strictly increasing times, and stay at or below `thrust_vacuum`.
+Thrust is linearly interpolated between points. When sea-level thrust is
+configured, the pressure correction is applied as a time-varying scale using
+the sea-level-to-vacuum thrust ratio.
+
+Propellant is still consumed uniformly over the nominal burn interval. The
+curve changes acceleration, not burn duration or mass flow. For a physically
+consistent engine model, supply a curve and propellant/burn-time values that
+represent the same engine operating point. The ideal velocity estimate uses
+the stage's nominal vacuum thrust and nominal mass flow.
 
 ## VehicleConfig
 
@@ -33,9 +40,9 @@ initial velocity, gravity inclusion, atmosphere choice, integrator selection,
 optional dynamic-pressure stopping threshold, and apogee stopping behavior.
 
 The atmosphere selector accepts `ussa1976` and `exponential`. Integrator
-choices are `euler`, `heun`, `rk4`, and `rk45`. The RK45 option currently
-uses the embedded fifth-order estimate on the fixed output grid; it does not
-adapt the time step automatically.
+choices are `euler`, `heun`, `rk4`, and `rk45`. RK45 adapts its internal
+steps within each configured output interval; output samples remain on the
+configured time grid.
 
 ## Pitch schedules
 

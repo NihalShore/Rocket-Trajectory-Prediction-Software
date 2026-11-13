@@ -66,7 +66,6 @@ def test_wind_profile_is_included_in_result_data():
     assert "air_relative_speed" in data["samples"][0]
 
 
-
 def test_burnout_at_max_time_is_processed():
     result = simulate(config(max_time=20.0, time_step=0.1))
 
@@ -78,3 +77,17 @@ def test_burnout_at_max_time_is_processed():
         later.time > earlier.time
         for earlier, later in zip(result.samples, result.samples[1:])
     )
+
+
+def test_simulation_uses_time_varying_thrust_curve():
+    stage = StageConfig(
+        "Throttle-shaped stage", 100.0, 400.0, 12000.0, 10.0,
+        thrust_curve=[(0.0, 6000.0), (5.0, 10000.0), (10.0, 6000.0)],
+    )
+    vehicle = VehicleConfig([stage], 30.0, 0.8, 0.4)
+    result = simulate(SimulationConfig(vehicle, max_time=10.0, time_step=0.5))
+
+    thrust_by_time = {round(sample.time, 6): sample.thrust for sample in result.samples}
+    assert thrust_by_time[5.0] == 10000.0
+    assert thrust_by_time[2.5] == 8000.0
+    assert result.samples[-1].event == "burnout"
