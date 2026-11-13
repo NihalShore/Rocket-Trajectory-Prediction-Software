@@ -40,6 +40,10 @@ def _stats(name, values):
 def _jitter_stage(stage, rng, thrust_sigma=0.03, mass_sigma=0.02):
     tf = max(0.5, rng.gauss(1.0, thrust_sigma))
     mf = max(0.5, rng.gauss(1.0, mass_sigma))
+    curve = (
+        tuple((time, thrust * tf) for time, thrust in stage.thrust_curve)
+        if stage.thrust_curve is not None else None
+    )
     return StageConfig(
         name=stage.name,
         dry_mass=max(1.0, stage.dry_mass * rng.gauss(1.0, mass_sigma)),
@@ -51,6 +55,7 @@ def _jitter_stage(stage, rng, thrust_sigma=0.03, mass_sigma=0.02):
         specific_impulse_sea_level=stage.specific_impulse_sea_level,
         fairing_mass=stage.fairing_mass,
         separation_time=stage.separation_time,
+        thrust_curve=curve,
     )
 
 
@@ -121,8 +126,6 @@ def print_summary(summary):
               f"p05={s.p05:10.1f}  p95={s.p95:10.1f}")
     print(f"completed {summary['n_ok']}/{summary['n_requested']}")
 
-
-# --- leftover helpers the tests still poke at ---
 
 @dataclass(frozen=True)
 class SampleSummary:
