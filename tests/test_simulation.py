@@ -82,12 +82,12 @@ def test_burnout_at_max_time_is_processed():
 def test_simulation_uses_time_varying_thrust_curve():
     stage = StageConfig(
         "Throttle-shaped stage", 100.0, 400.0, 12000.0, 10.0,
-        thrust_curve=[(0.0, 0.0), (5.0, 10000.0), (10.0, 0.0)],
+        thrust_curve=[(0.0, 6000.0), (5.0, 10000.0), (10.0, 6000.0)],
     )
     vehicle = VehicleConfig([stage], 30.0, 0.8, 0.4)
     result = simulate(SimulationConfig(vehicle, max_time=10.0, time_step=0.5))
 
     thrust_by_time = {round(sample.time, 6): sample.thrust for sample in result.samples}
     assert thrust_by_time[5.0] == 10000.0
-    assert thrust_by_time[2.5] == 5000.0
+    assert thrust_by_time[2.5] == 8000.0
     assert result.samples[-1].event == "burnout"
