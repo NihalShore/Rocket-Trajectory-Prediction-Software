@@ -28,6 +28,7 @@ class StageConfig:
     specific_impulse_sea_level: float | None = None
     fairing_mass: float = 0.0
     separation_time: float = 0.0
+    thrust_curve: tuple[tuple[float, float], ...] | None = None
 
     def __post_init__(self):
         required = (
@@ -52,6 +53,38 @@ class StageConfig:
             value = getattr(self, key)
             if value is not None and value <= 0:
                 raise ValueError(f"{key} must be positive")
+
+        if self.thrust_curve is not None:
+            try:
+                curve = tuple(tuple(point) for point in self.thrust_curve)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("thrust_curve must contain time/thrust pairs") from exc
+            if len(curve) < 2 or any(len(point) != 2 for point in curve):
+                raise ValueError("thrust_curve requires at least two time/thrust pairs")
+            _require_finite((value for point in curve for value in point), "thrust curve")
+            if curve[0][0] != 0.0 or not math.isclose(curve[-1][0], self.burn_time, rel_tol=0.0, abs_tol=1e-9):
+                raise ValueError("thrust_curve must start at zero and end at burn_time")
+            if any(time < 0 or thrust < 0 for time, thrust in curve):
+                raise ValueError("thrust curve times and values cannot be negative")
+            if any(b[0] <= a[0] for a, b in zip(curve, curve[1:])):
+                raise ValueError("thrust curve times must be strictly increasing")
+            if max(thrust for _, thrust in curve) > self.thrust_vacuum:
+                raise ValueError("thrust curve cannot exceed thrust_vacuum")
+            if not any(thrust > 0 for _, thrust in curve):
+                raise ValueError("thrust curve must contain positive thrust")
+            object.__setattr__(self, "thrust_curve", curve)
+
+    def vacuum_thrust_at(self, elapsed):
+        """Return linearly interpolated vacuum thrust at stage burn time."""
+        if self.thrust_curve is None:
+            return self.thrust_vacuum
+        if elapsed <= 0:
+            return self.thrust_curve[0][1]
+        for (t0, f0), (t1, f1) in zip(self.thrust_curve, self.thrust_curve[1:]):
+            if elapsed <= t1:
+                fraction = (elapsed - t0) / (t1 - t0)
+                return f0 + fraction * (f1 - f0)
+        return self.thrust_curve[-1][1]
 
     @property
     def mass_flow_rate(self):
