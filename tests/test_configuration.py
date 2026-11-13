@@ -73,3 +73,31 @@ def test_wind_profile_rejects_non_finite_values(value):
 def test_simulation_rejects_invalid_adaptive_controls(kwargs):
     with pytest.raises((TypeError, ValueError)):
         SimulationConfig(VehicleConfig([stage()], 50.0, 1.0), **kwargs)
+
+
+def test_stage_thrust_curve_interpolates_and_normalizes():
+    configured = StageConfig(
+        "Curve", 100.0, 500.0, 10000.0, 10.0,
+        thrust_curve=[(0.0, 0.0), (5.0, 8000.0), (10.0, 6000.0)],
+    )
+    assert configured.thrust_curve == (
+        (0.0, 0.0), (5.0, 8000.0), (10.0, 6000.0)
+    )
+    assert configured.vacuum_thrust_at(2.5) == pytest.approx(4000.0)
+    assert configured.vacuum_thrust_at(7.5) == pytest.approx(7000.0)
+
+
+@pytest.mark.parametrize(
+    "curve",
+    [
+        [(1.0, 1000.0), (10.0, 0.0)],
+        [(0.0, 1000.0), (9.0, 0.0)],
+        [(0.0, 1000.0), (5.0, 2000.0), (5.0, 1000.0), (10.0, 0.0)],
+        [(0.0, 1000.0), (10.0, np.inf)],
+        [(0.0, 12000.0), (10.0, 0.0)],
+        [(0.0, 0.0), (10.0, 0.0)],
+    ],
+)
+def test_stage_rejects_invalid_thrust_curves(curve):
+    with pytest.raises(ValueError):
+        StageConfig("Bad curve", 100.0, 500.0, 10000.0, 10.0, thrust_curve=curve)
