@@ -89,14 +89,14 @@ class SimulationResult:
         }
 
 
-def _stage_thrust(stage, pressure):
-    # if we only have vacuum thrust, just use that
+def _stage_thrust(stage, pressure, elapsed=0.0):
+    vacuum = stage.vacuum_thrust_at(elapsed)
     sea = stage.thrust_sea_level
     if sea is None:
-        return stage.thrust_vacuum
-    # crude linear blend between sea-level and vacuum
-    frac = min(1.0, max(0.0, pressure / 101325.0))
-    return stage.thrust_vacuum - (stage.thrust_vacuum - sea) * frac
+        return vacuum
+    sea_at_time = sea * vacuum / stage.thrust_vacuum
+    pressure_fraction = min(1.0, max(0.0, pressure / 101325.0))
+    return vacuum - (vacuum - sea_at_time) * pressure_fraction
 
 
 def _wind_components(config, altitude, heading):
@@ -146,7 +146,6 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
     pitch = pitch_program or PitchProgram([PitchKnot(0.0, config.launch_elevation_deg)])
     heading = math.radians(config.launch_azimuth_deg)
 
-    # optional earth-rotation boost along the launch azimuth
     vx0 = 0.0
     vy0 = 0.0
     if config.include_earth_rotation:
@@ -206,7 +205,6 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             remaining = stage.burn_time - stage_elapsed
             h = min(config.time_step, remaining, config.max_time - t)
 
-        # stage is done — drop its dry/fairing mass and move on
         if stage is not None and remaining <= 1e-10:
             stage_index += 1
             stage_elapsed = 0.0
@@ -216,15 +214,10 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             name = "stage_separation" if stage_index < len(stages) else "burnout"
             events.append(
                 Event(
-                    t,
-                    name,
-                    float(y[1]),
-                    float(math.hypot(y[2], y[3])),
-                    float(y[4]),
-                    {"stage": stage.name, "stage_index": stage_index - 1},
+                    t, name, float(y[1]), float(math.hypot(y[2], y[3])),
+                    float(y[4]), {"stage": stage.name, "stage_index": stage_index - 1},
                 )
             )
-            # don't add another sample at the exact same timestamp
             if samples:
                 last = samples[-1]
                 air_vx, air_vy, wind_x, wind_y = _air_relative_velocity(
@@ -232,11 +225,8 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
                 )
                 air_speed = math.hypot(air_vx, air_vy)
                 loads = aerodynamic_loads(
-                    max(0.0, y[1]),
-                    air_speed,
-                    vehicle.reference_area,
-                    vehicle.drag_coefficient,
-                    config.atmosphere_model,
+                    max(0.0, y[1]), air_speed, vehicle.reference_area,
+                    vehicle.drag_coefficient, config.atmosphere_model,
                 )
                 samples[-1] = _sample(
                     last.time, y, 0.0, loads, stage_index,
@@ -265,14 +255,14 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             else:
                 ax_drag = ay_drag = 0.0
 
-            thrust = _stage_thrust(stage, atm.pressure) if stage is not None else 0.0
+            elapsed = stage_elapsed + (time - t)
+            thrust = _stage_thrust(stage, atm.pressure, elapsed) if stage is not None else 0.0
             ux, uy = pitch.direction(time)
             g = gravity(safe_alt) if config.include_gravity_loss else 0.0
 
             return np.array(
                 [
-                    vx,
-                    vy,
+                    vx, vy,
                     thrust * ux / max(mass, 1e-9) + ax_drag,
                     thrust * uy / max(mass, 1e-9) + ay_drag - g,
                     -flow,
@@ -281,22 +271,16 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
 
         if config.integrator == "rk45":
             adaptive = integrate_adaptive(
-                derivative,
-                y,
-                t,
-                t + h,
-                initial_step=h,
+                derivative, y, t, t + h, initial_step=h,
                 absolute_tolerance=config.absolute_tolerance,
                 relative_tolerance=config.relative_tolerance,
                 min_step=min(config.min_time_step, h),
-                max_step=h,
-                max_steps=config.max_internal_steps,
+                max_step=h, max_steps=config.max_internal_steps,
             )
             yn = adaptive.states[-1].copy()
         else:
             yn = fixed[config.integrator](derivative, t, y, h)
 
-        # don't burn more propellant than the stage has
         if stage is not None:
             yn[4] = max(yn[4], y[4] - stage.propellant_mass)
         yn[1] = max(-1.0, yn[1])
@@ -312,13 +296,10 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
         )
         air_speed = math.hypot(air_vx, air_vy)
         loads = aerodynamic_loads(
-            max(0.0, y[1]),
-            air_speed,
-            vehicle.reference_area,
-            vehicle.drag_coefficient,
-            config.atmosphere_model,
+            max(0.0, y[1]), air_speed, vehicle.reference_area,
+            vehicle.drag_coefficient, config.atmosphere_model,
         )
-        thrust = _stage_thrust(stage, atm.pressure) if stage is not None else 0.0
+        thrust = _stage_thrust(stage, atm.pressure, stage_elapsed) if stage is not None else 0.0
         samples.append(
             _sample(
                 t, y, thrust, loads, stage_index, "",
@@ -329,17 +310,13 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
         if config.max_dynamic_pressure and loads.dynamic_pressure > config.max_dynamic_pressure:
             events.append(
                 Event(
-                    t,
-                    "dynamic_pressure_limit",
-                    float(y[1]),
-                    float(math.hypot(y[2], y[3])),
-                    float(y[4]),
+                    t, "dynamic_pressure_limit", float(y[1]),
+                    float(math.hypot(y[2], y[3])), float(y[4]),
                     {"limit": config.max_dynamic_pressure},
                 )
             )
             break
 
-        # apogee: vertical velocity crossed zero going down
         if len(samples) > 1 and samples[-2].state.vertical_velocity > 0 >= y[3]:
             events.append(
                 Event(
@@ -354,8 +331,6 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             if config.stop_at_apogee:
                 break
 
-    # The loop may stop at max_time on the exact burnout step, before the
-    # next iteration gets a chance to process the stage transition.
     if stage_index < len(stages):
         stage = stages[stage_index]
         if stage_elapsed >= stage.burn_time - 1e-10:
@@ -366,12 +341,8 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             name = "stage_separation" if stage_index < len(stages) else "burnout"
             events.append(
                 Event(
-                    t,
-                    name,
-                    float(y[1]),
-                    float(math.hypot(y[2], y[3])),
-                    float(y[4]),
-                    {"stage": stage.name, "stage_index": stage_index - 1},
+                    t, name, float(y[1]), float(math.hypot(y[2], y[3])),
+                    float(y[4]), {"stage": stage.name, "stage_index": stage_index - 1},
                 )
             )
             air_vx, air_vy, wind_x, wind_y = _air_relative_velocity(
@@ -379,34 +350,20 @@ def simulate(config: SimulationConfig, pitch_program: PitchProgram | None = None
             )
             air_speed = math.hypot(air_vx, air_vy)
             loads = aerodynamic_loads(
-                max(0.0, y[1]),
-                air_speed,
-                vehicle.reference_area,
-                vehicle.drag_coefficient,
-                config.atmosphere_model,
+                max(0.0, y[1]), air_speed, vehicle.reference_area,
+                vehicle.drag_coefficient, config.atmosphere_model,
             )
             last = samples[-1]
             samples[-1] = _sample(
-                last.time,
-                y,
-                0.0,
-                loads,
-                stage_index,
-                _merge_event(last.event, name),
-                wind_x,
-                wind_y,
-                air_speed,
+                last.time, y, 0.0, loads, stage_index,
+                _merge_event(last.event, name), wind_x, wind_y, air_speed,
             )
 
     if stage_index >= len(stages) and not any(e.name == "burnout" for e in events):
         events.append(
             Event(
-                t,
-                "burnout",
-                float(y[1]),
-                float(math.hypot(y[2], y[3])),
-                float(y[4]),
-                {},
+                t, "burnout", float(y[1]),
+                float(math.hypot(y[2], y[3])), float(y[4]), {},
             )
         )
 
